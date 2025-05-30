@@ -1,92 +1,140 @@
-// public/snake.js
+const express   = require("express");
+const http      = require("http");
+const WebSocket = require("ws");
 
-// 1) Grab the canvas and context
-const canvas = document.getElementById("gameCanvas");
-const ctx    = canvas.getContext("2d");
+const app    = express();
+const server = http.createServer(app);
+const wss    = new WebSocket.Server({ server });
 
-// 2) Ask the player for their name
-let playerName = prompt("Enter your name:");
-let role       = "spectator";
+app.use(express.static("public"));
 
-// 3) Connect to your Render back-end
-const BACKEND_URL = window.BACKEND_URL || "https://snake-15x2.onrender.com";
-const socket      = new WebSocket(BACKEND_URL.replace(/^http/, "ws"));
+let queue         = [];
+let spectators    = [];
+let currentPlayer = null;
+let blocks        = [];
 
-socket.onopen = () => {
-  console.log("WS open, joining as", playerName);
-  socket.send(JSON.stringify({ type: "join", name: playerName }));
-};
-
-socket.onerror = err => console.error("WS error", err);
-
-socket.onmessage = event => {
-  const msg = JSON.parse(event.data);
-  console.log("WS message:", msg);
-
-  if (msg.type === "roleAssignment") {
-    role = msg.role;
-    document.getElementById("role").innerText = `You are a ${role}`;
-    if (role === "spectator") startSpectatorAbilityCooldown();
-  }
-
-  if (msg.type === "updateGameState") {
-    // For debugging, you can uncomment this:
-    // console.log("state keys:", Object.keys(msg.state), msg.state);
-    renderGame(msg.state);
-  }
-
-  if (msg.type === "gameOver") {
-    alert("Game Over! Resetting…");
-  }
-};
-
-// 4) Handle player movement
-document.addEventListener("keydown", e => {
-  if (role !== "player") return;
-  let dir = null;
-  if (e.key === "ArrowUp")    dir = { x: 0,  y: -1 };
-  if (e.key === "ArrowDown")  dir = { x: 0,  y: 1 };
-  if (e.key === "ArrowLeft")  dir = { x: -1, y: 0 };
-  if (e.key === "ArrowRight") dir = { x: 1,  y: 0 };
-  if (dir) socket.send(JSON.stringify({ type: "changeDirection", direction: dir }));
-});
-
-// 5) Spectator’s block‐placing cooldown
-function startSpectatorAbilityCooldown() {
-  const btn   = document.getElementById("useAbility");
-  let   ready = true;
-  btn.disabled = false;
-
-  btn.onclick = () => {
-    if (!ready) return;
-    const x = parseInt(prompt("Block X (0–19):"), 10);
-    const y = parseInt(prompt("Block Y (0–19):"), 10);
-    socket.send(JSON.stringify({ type: "placeBlock", x, y }));
-    ready = false;
-    btn.disabled = true;
-    setTimeout(() => { ready = true; btn.disabled = false; }, 60000);
+// Generate a fresh snake & direction
+function createInitialGameState() {
+  return {
+    snake: [{ x: 10, y: 10 }],
+    direction: { x: 1, y: 0 }
   };
 }
 
-// 6) Render function (must match server’s state shape)
-function renderGame(state) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+let gameState = createInitialGameState();
 
-  // Draw the snake (server sends `state.snake`, not `state.snakes`)
-  ctx.fillStyle = "#0f0";
-  state.snake.forEach(p =>
-    ctx.fillRect(p.x * 20, p.y * 20, 20, 20)
-  );
-
-  // Draw blocks
-  ctx.fillStyle = "red";
-  state.blocks.forEach(b =>
-    ctx.fillRect(b.x * 20, b.y * 20, 20, 20)
-  );
-
-  // Draw food if present
-  if (state.food) {
-    ctx.fillStyle = "yellow";
-    ctx.fillRect(state.food.x * 20, state.food.y * 20, 20, 20);
+// Assign next spectator to be player
+function assignRoles() {
+  if (!currentPlayer && queue.length > 0) {
+    currentPlayer = queue.shift();
+    currentPlayer.role = "player";
+    currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
   }
 }
+
+// Advance the snake, handle death & reset
+function moveSnake() {
+  const head = gameState.snake[0];
+  const dir  = gameState.direction;
+  const newHead = { x: head.x + dir.x, y: head.y + dir.y };
+
+  // Collision with a block or itself?
+  if (
+    blocks.some(b => b.x === newHead.x && b.y === newHead.y) ||
+    gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y)
+  ) {
+    // Notify the player
+    if (currentPlayer) {
+      currentPlayer.send(JSON.stringify({ type: "gameOver" }));
+    }
+
+    // Reset everything
+    currentPlayer = null;
+    blocks        = [];                   // ← clear old blocks
+    gameState     = createInitialGameState();  // ← fresh snake+direction
+
+    // Immediately push this reset state to all clients
+    broadcastGameState();
+
+    // And pick the next player
+    assignRoles();
+    return;
+  }
+
+  // Normal move: grow at head, shrink at tail
+  gameState.snake.unshift(newHead);
+  gameState.snake.pop();
+}
+
+// Send the full state to every connected client
+function broadcastGameState() {
+  const state = {
+    snake: gameState.snake,
+    blocks,
+    // you can add food here if you re-introduce it
+  };
+
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: "updateGameState", state }));
+    }
+  });
+}
+
+// Run the game loop
+setInterval(() => {
+  if (currentPlayer) {
+    moveSnake();
+    broadcastGameState();
+  }
+}, 200);
+
+// WebSocket connection handling
+wss.on("connection", ws => {
+  ws.on("message", msg => {
+    const data = JSON.parse(msg);
+
+    if (data.type === "join") {
+      ws.name          = data.name;
+      ws.lastBlockTime = 0;
+
+      if (!currentPlayer) {
+        currentPlayer = ws;
+        ws.role        = "player";
+        ws.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
+      } else {
+        ws.role       = "spectator";
+        spectators.push(ws);
+        queue.push(ws);
+        ws.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
+      }
+    }
+
+    if (data.type === "placeBlock" && ws.role === "spectator") {
+      const now = Date.now();
+      if (now - ws.lastBlockTime >= 60000) {
+        blocks.push({ x: data.x, y: data.y });
+        ws.lastBlockTime = now;
+      }
+    }
+
+    if (data.type === "changeDirection" && ws.role === "player") {
+      gameState.direction = data.direction;
+    }
+  });
+
+  ws.on("close", () => {
+    if (ws === currentPlayer) {
+      currentPlayer = null;
+      assignRoles();
+    } else {
+      spectators = spectators.filter(s => s !== ws);
+      queue      = queue.filter(q => q !== ws);
+    }
+  });
+});
+
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+  console.log("Server started on port", PORT);
+});
