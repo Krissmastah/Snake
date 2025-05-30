@@ -1,0 +1,5 @@
+[build]
+  # leave command blank for pure static
+  command = ""
+  # must point to the folder that contains index.html
+  publish = "public"
