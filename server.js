@@ -8,20 +8,40 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static("public"));
 
+const GRID_WIDTH = 20;
+const GRID_HEIGHT = 20;
+
 let queue = [];
 let spectators = [];
 let currentPlayer = null;
 let blocks = [];
-let gameState = createInitialGameState();
 
+// Create initial game state (snake + direction), then spawn the first food
 function createInitialGameState() {
   return {
     snake: [{ x: 10, y: 10 }],
     direction: { x: 1, y: 0 },
-    blocks: [],
+    food: null
   };
 }
 
+let gameState = createInitialGameState();
+spawnFood();
+
+// Spawn a food pellet at a random empty cell
+function spawnFood() {
+  let x, y;
+  do {
+    x = Math.floor(Math.random() * GRID_WIDTH);
+    y = Math.floor(Math.random() * GRID_HEIGHT);
+  } while (
+    gameState.snake.some(p => p.x === x && p.y === y) ||
+    blocks.some(b => b.x === x && b.y === y)
+  );
+  gameState.food = { x, y };
+}
+
+// Assign the next spectator in queue to be the player
 function assignRoles() {
   if (!currentPlayer && queue.length > 0) {
     currentPlayer = queue.shift();
@@ -30,25 +50,48 @@ function assignRoles() {
   }
 }
 
+// Move the snake, grow on eating, reset on collision
 function moveSnake() {
   const head = gameState.snake[0];
   const dir = gameState.direction;
   const newHead = { x: head.x + dir.x, y: head.y + dir.y };
 
-  if (blocks.some(b => b.x === newHead.x && b.y === newHead.y)) {
-    currentPlayer.send(JSON.stringify({ type: "gameOver" }));
+  // Check collision with blocks or self
+  if (
+    blocks.some(b => b.x === newHead.x && b.y === newHead.y) ||
+    gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y)
+  ) {
+    // Game over: reset state and roles
+    if (currentPlayer) currentPlayer.send(JSON.stringify({ type: "gameOver" }));
     currentPlayer = null;
+    blocks = [];
     gameState = createInitialGameState();
+    spawnFood();
     assignRoles();
     return;
   }
 
+  // Advance snake
   gameState.snake.unshift(newHead);
-  gameState.snake.pop();
+
+  // Eating food?
+  if (newHead.x === gameState.food.x && newHead.y === gameState.food.y) {
+    // Grow (don't pop tail) and spawn a new pellet
+    spawnFood();
+  } else {
+    // Normal move
+    gameState.snake.pop();
+  }
 }
 
+// Broadcast the full game state (snake, blocks, food) to everyone
 function broadcastGameState() {
-  const state = { ...gameState, blocks };
+  const state = {
+    snake: gameState.snake,
+    blocks,
+    food: gameState.food
+  };
+
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ type: "updateGameState", state }));
@@ -56,6 +99,7 @@ function broadcastGameState() {
   });
 }
 
+// Game loop: tick every 200ms
 setInterval(() => {
   if (currentPlayer) {
     moveSnake();
@@ -63,8 +107,9 @@ setInterval(() => {
   }
 }, 200);
 
-wss.on("connection", (ws) => {
-  ws.on("message", (msg) => {
+// Handle new WebSocket connections
+wss.on("connection", ws => {
+  ws.on("message", msg => {
     const data = JSON.parse(msg);
 
     if (data.type === "join") {
@@ -72,10 +117,12 @@ wss.on("connection", (ws) => {
       ws.lastBlockTime = 0;
 
       if (!currentPlayer) {
+        // First joiner becomes player
         currentPlayer = ws;
         ws.role = "player";
         ws.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
       } else {
+        // Others are spectators
         ws.role = "spectator";
         spectators.push(ws);
         queue.push(ws);
@@ -108,5 +155,5 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(process.env.PORT || 8080, () => {
-  console.log("Server started on port 8080");
+  console.log("Server started on port", process.env.PORT || 8080);
 });
