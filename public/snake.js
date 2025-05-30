@@ -1,13 +1,21 @@
+// Hent canvas og kontekst som før
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+
+// Prompt brukernavn
 let playerName = prompt("Enter your name:");
 let role = "spectator";
-let socket = new WebSocket(location.origin.replace(/^http/, "ws").replace(/\/$/, ""));
 
+// --- Her er endringen: bruk BACKEND_URL fra window-objektet ---
+const BACKEND_URL = window.BACKEND_URL;
+const socket = new WebSocket(`${BACKEND_URL.replace(/^http/, "ws")}`);
+
+// Når tilkoblingen er åpen, send join-melding
 socket.onopen = () => {
   socket.send(JSON.stringify({ type: "join", name: playerName }));
 };
 
+// Mottak av meldinger
 socket.onmessage = (event) => {
   const msg = JSON.parse(event.data);
 
@@ -28,6 +36,7 @@ socket.onmessage = (event) => {
   }
 };
 
+// Tastetrykk for spilleren
 document.addEventListener("keydown", (e) => {
   if (role !== "player") return;
   let dir = null;
