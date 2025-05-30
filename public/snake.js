@@ -1,26 +1,27 @@
-// Grab canvas
+// public/snake.js
+
+// 1) Grab the canvas and context
 const canvas = document.getElementById("gameCanvas");
 const ctx    = canvas.getContext("2d");
 
-// Player setup
+// 2) Ask the player for their name
 let playerName = prompt("Enter your name:");
 let role       = "spectator";
 
-// Connect to your Render back-end
+// 3) Connect to your Render back-end
 const BACKEND_URL = window.BACKEND_URL || "https://snake-15x2.onrender.com";
 const socket      = new WebSocket(BACKEND_URL.replace(/^http/, "ws"));
 
-// When open, join
 socket.onopen = () => {
+  console.log("WS open, joining as", playerName);
   socket.send(JSON.stringify({ type: "join", name: playerName }));
 };
 
-// Errors
 socket.onerror = err => console.error("WS error", err);
 
-// Handle messages
 socket.onmessage = event => {
   const msg = JSON.parse(event.data);
+  console.log("WS message:", msg);
 
   if (msg.type === "roleAssignment") {
     role = msg.role;
@@ -29,6 +30,8 @@ socket.onmessage = event => {
   }
 
   if (msg.type === "updateGameState") {
+    // For debugging, you can uncomment this:
+    // console.log("state keys:", Object.keys(msg.state), msg.state);
     renderGame(msg.state);
   }
 
@@ -37,7 +40,7 @@ socket.onmessage = event => {
   }
 };
 
-// Player movement
+// 4) Handle player movement
 document.addEventListener("keydown", e => {
   if (role !== "player") return;
   let dir = null;
@@ -48,7 +51,7 @@ document.addEventListener("keydown", e => {
   if (dir) socket.send(JSON.stringify({ type: "changeDirection", direction: dir }));
 });
 
-// Spectator block cooldown
+// 5) Spectator’s block‐placing cooldown
 function startSpectatorAbilityCooldown() {
   const btn   = document.getElementById("useAbility");
   let   ready = true;
@@ -65,11 +68,11 @@ function startSpectatorAbilityCooldown() {
   };
 }
 
-// Render the game using the correct properties
+// 6) Render function (must match server’s state shape)
 function renderGame(state) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw the snake
+  // Draw the snake (server sends `state.snake`, not `state.snakes`)
   ctx.fillStyle = "#0f0";
   state.snake.forEach(p =>
     ctx.fillRect(p.x * 20, p.y * 20, 20, 20)
@@ -81,7 +84,7 @@ function renderGame(state) {
     ctx.fillRect(b.x * 20, b.y * 20, 20, 20)
   );
 
-  // Draw food, if present
+  // Draw food if present
   if (state.food) {
     ctx.fillStyle = "yellow";
     ctx.fillRect(state.food.x * 20, state.food.y * 20, 20, 20);
