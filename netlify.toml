@@ -6,4 +6,4 @@
 
 [build.environment]
   # Point this at your Render backend
-  BACKEND_URL = "https://snake-abc123.onrender.com"
+  BACKEND_URL = "https://snakesnape.netlify.app/"
