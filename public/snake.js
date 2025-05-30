@@ -9,7 +9,7 @@ let playerName = prompt("Enter your name:");
 let role       = "spectator";
 
 // 3) Determine the backend URL (hard-coded for now)
-const BACKEND_URL = window.BACKEND_URL || "https://snakesnape.netlify.app/";
+const BACKEND_URL = window.BACKEND_URL || "https://snake-15x2.onrender.com";
 
 // 4) Build the ws:// or wss:// URL and open the socket
 const socketUrl = BACKEND_URL.replace(/^http/, "ws");
