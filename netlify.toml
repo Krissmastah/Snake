@@ -1,5 +1,9 @@
 [build]
-  # leave command blank for pure static
+  # no build step for pure static site
   command = ""
-  # must point to the folder that contains index.html
+  # folder with your index.html
   publish = "public"
+
+[build.environment]
+  # Point this at your Render backend
+  BACKEND_URL = "https://snake-abc123.onrender.com"
