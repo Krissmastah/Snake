@@ -128,6 +128,9 @@ wss.on("connection", ws => {
         queue.push(ws);
         ws.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
       }
+
+      // ← NEW: Immediately send the current state so the snake appears right away
+      broadcastGameState();
     }
 
     if (data.type === "placeBlock" && ws.role === "spectator") {
