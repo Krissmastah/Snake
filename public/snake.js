@@ -1,79 +1,132 @@
-// Hent canvas og kontekst som før
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const express = require('express');
+const { WebSocketServer } = require('ws');
+const path = require('path');
 
-// Prompt brukernavn
-let playerName = prompt("Enter your name:");
-let role = "spectator";
+const PORT = process.env.PORT || 3000;
+const WIDTH = 20;
+const HEIGHT = 20;
+const TICK_RATE = 100; // ms
 
-// --- Her er endringen: bruk BACKEND_URL fra window-objektet ---
-const BACKEND_URL = window.BACKEND_URL;
-const socket = new WebSocket(`${BACKEND_URL.replace(/^http/, "ws")}`);
+const app = express();
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Når tilkoblingen er åpen, send join-melding
-socket.onopen = () => {
-  socket.send(JSON.stringify({ type: "join", name: playerName }));
-};
-
-// Mottak av meldinger
-socket.onmessage = (event) => {
-  const msg = JSON.parse(event.data);
-
-  if (msg.type === "roleAssignment") {
-    role = msg.role;
-    document.getElementById("role").innerText = `You are a ${role}`;
-    if (role === "spectator") {
-      startSpectatorAbilityCooldown();
-    }
-  }
-
-  if (msg.type === "updateGameState") {
-    renderGame(msg.state);
-  }
-
-  if (msg.type === "gameOver") {
-    alert("Game Over! Spectator sabotage was successful.");
-  }
-};
-
-// Tastetrykk for spilleren
-document.addEventListener("keydown", (e) => {
-  if (role !== "player") return;
-  let dir = null;
-  if (e.key === "ArrowUp") dir = { x: 0, y: -1 };
-  if (e.key === "ArrowDown") dir = { x: 0, y: 1 };
-  if (e.key === "ArrowLeft") dir = { x: -1, y: 0 };
-  if (e.key === "ArrowRight") dir = { x: 1, y: 0 };
-  if (dir) {
-    socket.send(JSON.stringify({ type: "changeDirection", direction: dir }));
-  }
+const server = app.listen(PORT, () => {
+  console.log(`HTTP server listening on port ${PORT}`);
 });
 
-function startSpectatorAbilityCooldown() {
-  const button = document.getElementById("useAbility");
-  let canUse = true;
+const wss = new WebSocketServer({ server });
 
-  button.onclick = () => {
-    if (!canUse) return;
-    const x = parseInt(prompt("Block X position (0–19):"));
-    const y = parseInt(prompt("Block Y position (0–19):"));
-    socket.send(JSON.stringify({ type: "placeBlock", x, y }));
-    canUse = false;
-    button.disabled = true;
-    setTimeout(() => {
-      canUse = true;
-      button.disabled = false;
-    }, 60000);
+let clients = new Map(); // ws -> { name, role }
+let gameState = {
+  // start snake in center moving right:
+  snake: [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }],
+  direction: { x: 1, y: 0 },
+  blocks: [],
+  food: null
+};
+
+// spawn first food
+spawnFood();
+
+// Assign roles round-robin: first two joiners are players, rest are spectators
+function assignRoles() {
+  const joiners = Array.from(clients.values());
+  clients.forEach((info, ws) => {
+    let idx = joiners.indexOf(info);
+    info.role = idx < 2 ? 'player' : 'spectator';
+    ws.send(JSON.stringify({ type: 'roleAssignment', role: info.role }));
+  });
+}
+
+// clean up and reassign when someone leaves
+function broadcastRoleAssignments() {
+  assignRoles();
+}
+
+// spawn food at random empty cell
+function spawnFood() {
+  let x, y;
+  do {
+    x = Math.floor(Math.random() * WIDTH);
+    y = Math.floor(Math.random() * HEIGHT);
+  } while (
+    gameState.snake.some(p => p.x === x && p.y === y) ||
+    gameState.blocks.some(b => b.x === x && b.y === y)
+  );
+  gameState.food = { x, y };
+}
+
+// on new WS connection
+wss.on('connection', ws => {
+  clients.set(ws, { name: null, role: 'spectator' });
+
+  ws.on('message', msg => {
+    const data = JSON.parse(msg);
+    if (data.type === 'join') {
+      clients.get(ws).name = data.name;
+      broadcastRoleAssignments();
+    }
+    if (data.type === 'changeDirection' && clients.get(ws).role === 'player') {
+      // Only allow one player to set direction (the first player)
+      gameState.direction = data.direction;
+    }
+    if (data.type === 'placeBlock' && clients.get(ws).role === 'spectator') {
+      gameState.blocks.push({ x: data.x, y: data.y });
+    }
+  });
+
+  ws.on('close', () => {
+    clients.delete(ws);
+    broadcastRoleAssignments();
+  });
+});
+
+// game loop
+setInterval(() => {
+  // advance snake head
+  const head = gameState.snake[0];
+  const newHead = {
+    x: (head.x + gameState.direction.x + WIDTH) % WIDTH,
+    y: (head.y + gameState.direction.y + HEIGHT) % HEIGHT
   };
 
-  button.disabled = false;
-}
+  // check collision with blocks or self
+  if (
+    gameState.blocks.some(b => b.x === newHead.x && b.y === newHead.y) ||
+    gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y)
+  ) {
+    // reset game
+    gameState.snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+    gameState.direction = { x: 1, y: 0 };
+    gameState.blocks = [];
+    spawnFood();
+    // notify clients
+    wss.clients.forEach(c =>
+      c.send(JSON.stringify({ type: 'gameOver' }))
+    );
+    return;
+  }
 
-function renderGame(state) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#0f0";
-  state.snake.forEach(p => ctx.fillRect(p.x * 20, p.y * 20, 20, 20));
+  gameState.snake.unshift(newHead);
 
-  ctx.fillStyle = "red";
-  state.blocks.forEach(b => ctx.fillRect(b.x * 20, b.y * 20, 20, 20));
-}
+  // eating food?
+  if (newHead.x === gameState.food.x && newHead.y === gameState.food.y) {
+    spawnFood();
+  } else {
+    // normal move
+    gameState.snake.pop();
+  }
+
+  // broadcast full state
+  const payload = JSON.stringify({
+    type: 'updateGameState',
+    state: {
+      snakes: [gameState.snake],     // array of snakes (here single)
+      blocks: gameState.blocks,
+      food: gameState.food
+    }
+  });
+  wss.clients.forEach(c => {
+    if (c.readyState === c.OPEN) c.send(payload);
+  });
+}, TICK_RATE);
