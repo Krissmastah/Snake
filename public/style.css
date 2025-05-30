@@ -1,0 +1,16 @@
+body {
+  background: #111;
+  color: #fff;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 20px;
+}
+canvas {
+  background: #222;
+  border: 1px solid #555;
+}
+button {
+  margin-top: 10px;
+}
