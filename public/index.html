@@ -4,19 +4,37 @@
   <meta charset="UTF-8" />
   <title>Multiplayer Snake</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    body { margin: 0; display: flex; height: 100vh; }
+    #sidebar {
+      width: 200px; padding: 1rem; background: #f4f4f4;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+      overflow-y: auto;
+    }
+    #gameContainer {
+      flex: 1; display: flex; justify-content: center; align-items: center;
+    }
+    canvas { border: 2px solid #333; }
+    h3 { margin-top: 0; }
+    ul { list-style: none; padding: 0; }
+  </style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="400" height="400"></canvas>
-  <div>
+  <div id="sidebar">
+    <h3>Players Online</h3>
+    <ul id="playersList"></ul>
+    <h3>Scoreboard</h3>
+    <ul id="scoreboard"></ul>
     <p id="role"></p>
     <button id="useAbility" disabled>Use Block Ability</button>
   </div>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+  </div>
 
-  <!-- Inject BACKEND_URL from Netlify -->
   <script>
     window.BACKEND_URL = "https://snake-15x2.onrender.com";
   </script>
-
   <script src="snake.js"></script>
 </body>
 </html>
