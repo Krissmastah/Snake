@@ -14,11 +14,10 @@ const GRID_WIDTH  = 20;
 const GRID_HEIGHT = 20;
 
 let queue         = [];     // spectators waiting to become player
-let spectators    = [];     // list of all spectator WebSockets
-let currentPlayer = null;   // the WebSocket of whoever is currently playing
-let blocks        = [];     // array of {x,y} for spectator‐placed blocks
+let currentPlayer = null;   // WS of the player
+let blocks        = [];     // spectator‐placed blocks
 
-// Creates a fresh snake (centered) + direction; food is set to null for now
+// Returns a fresh snake + direction (food will be spawned separately)
 function createInitialGameState() {
   return {
     snake: [{ x: 10, y: 10 }],
@@ -28,9 +27,9 @@ function createInitialGameState() {
 }
 
 let gameState = createInitialGameState();
-spawnFood(); // place the first food pellet
+spawnFood();  // place first pellet
 
-// Pick a random empty cell for food
+// Place food in a random empty cell
 function spawnFood() {
   let x, y;
   do {
@@ -43,7 +42,7 @@ function spawnFood() {
   gameState.food = { x, y };
 }
 
-// If no currentPlayer, assign the next WebSocket in queue to be player
+// If there is no currentPlayer, pull from queue
 function assignRoles() {
   if (!currentPlayer && queue.length > 0) {
     currentPlayer = queue.shift();
@@ -52,86 +51,85 @@ function assignRoles() {
   }
 }
 
-// Advance snake; grow on eating; if collision → handle death/rotate roles
+// Move the snake, handle growth on food, and collisions
 function moveSnake() {
   const head = gameState.snake[0];
   const dir  = gameState.direction;
-  const newHead = {
-    x: head.x + dir.x,
-    y: head.y + dir.y
-  };
+  const newHead = { x: head.x + dir.x, y: head.y + dir.y };
 
-  // Collision with block or self?
-  if (
-    blocks.some(b => b.x === newHead.x && b.y === newHead.y) ||
-    gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y)
-  ) {
-    // 1) Notify old player they lost
+  // Check collisions
+  const hitBlock = blocks.some(b => b.x === newHead.x && b.y === newHead.y);
+  const hitSelf  = gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y);
+  if (hitBlock || hitSelf) {
+    // Inform current player they died
     if (currentPlayer) {
       currentPlayer.send(JSON.stringify({ type: "gameOver" }));
-      // If there's someone waiting, demote them to spectator and re-queue
+
+      // If someone is waiting, demote this player → spectator and re‐queue
       if (queue.length > 0) {
         currentPlayer.role = "spectator";
         queue.push(currentPlayer);
         currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
         currentPlayer = null;
         assignRoles();
+      } else {
+        // No one waiting: keep the same player, but still re‐notify them below
       }
-      // If no one is waiting, we keep the same player but we still reset the board below
     }
 
-    // 2) Reset game state & blocks
+    // Reset board
     blocks = [];
     gameState = createInitialGameState();
     spawnFood();
 
-    // 3) Immediately broadcast the fresh board (new snake + empty blocks + fresh food)
+    // If no new player was assigned (because queue was empty), re‐notify the same player
+    if (currentPlayer) {
+      currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
+    }
+
+    // Broadcast fresh state so clients see the new snake immediately
     broadcastGameState();
     return;
   }
 
-  // No collision: move normally
+  // Normal movement: push new head, pop tail unless eating food
   gameState.snake.unshift(newHead);
-
-  // Eating food?
   if (newHead.x === gameState.food.x && newHead.y === gameState.food.y) {
-    // Don’t pop tail → snake grows
+    // Grew: leave tail, and spawn a new pellet
     spawnFood();
   } else {
     gameState.snake.pop();
   }
 }
 
-// Broadcast { type: "updateGameState", state } to all connected clients
-// We now include `players: [...]` so clients can render an overview
+// Broadcast the entire game state (snake/blocks/food) plus a list of all players
 function broadcastGameState() {
-  // Build an array of all connected players (WebSocket → {name, role})
-  const players = [];
+  // Build a simple array of {name, role} for every connected socket
+  const playersList = [];
   wss.clients.forEach(ws => {
     if (ws.name) {
-      players.push({
-        name: ws.name,
-        role: ws.role || "spectator"
-      });
+      playersList.push({ name: ws.name, role: ws.role });
     }
   });
 
-  const statePayload = {
-    snake: gameState.snake,
-    blocks,
-    food: gameState.food,
-    players
-  };
+  const payload = JSON.stringify({
+    type: "updateGameState",
+    state: {
+      snake: gameState.snake,
+      blocks,
+      food: gameState.food,
+      players: playersList
+    }
+  });
 
-  const msg = JSON.stringify({ type: "updateGameState", state: statePayload });
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
+  wss.clients.forEach(ws => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
     }
   });
 }
 
-// Game loop → every 200ms, if there’s a player, move + broadcast
+// Game loop: every 200ms, move+broadcast if there’s a player
 setInterval(() => {
   if (currentPlayer) {
     moveSnake();
@@ -139,36 +137,35 @@ setInterval(() => {
   }
 }, 200);
 
-// Handle new WebSocket connections
+// Handle incoming WebSocket connections
 wss.on("connection", ws => {
-  // Give each new socket a default score of 0
-  ws.score = 0;
+  ws.score = 0; // (unused for now, but you could track points here)
 
   ws.on("message", raw => {
     const data = JSON.parse(raw);
 
-    // When someone clicks "Join" / on page load, they’ll send this
+    // When a client first joins
     if (data.type === "join") {
       ws.name          = data.name;
       ws.lastBlockTime = 0;
 
       if (!currentPlayer) {
-        // If no one is playing, make this socket the player
+        // No player yet → make this socket the player
         currentPlayer = ws;
         ws.role        = "player";
         ws.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
       } else {
-        // Otherwise, make them a spectator and add to the queue
-        ws.role       = "spectator";
+        // Already have a player → this one becomes spectator
+        ws.role    = "spectator";
         queue.push(ws);
         ws.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
       }
 
-      // Immediately send the current game state so they see the board right away
+      // Immediately broadcast so they see the board as soon as they join
       broadcastGameState();
     }
 
-    // Spectator wants to place a block
+    // Spectator places a block
     if (data.type === "placeBlock" && ws.role === "spectator") {
       const now = Date.now();
       if (now - ws.lastBlockTime >= 60000) {
@@ -182,38 +179,40 @@ wss.on("connection", ws => {
       gameState.direction = data.direction;
     }
 
-    // NEW: Someone clicked “Refresh Game”
+    // **NEW: client clicked “Refresh Game”**
     if (data.type === "reset") {
-      // If there is someone waiting, demote the current player
+      // If someone is waiting, demote current player → spectator and assign next
       if (currentPlayer && queue.length > 0) {
         currentPlayer.role = "spectator";
         queue.push(currentPlayer);
         currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
         currentPlayer = null;
         assignRoles();
+      } else if (currentPlayer) {
+        // No one waiting: re‐notify the same player of their role
+        currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
       }
-      // Otherwise, if no one is waiting, keep the same currentPlayer
 
-      // Clear blocks + reset snake + spawn new food
+      // Reset board: clear blocks, new snake, new food
       blocks = [];
       gameState = createInitialGameState();
       spawnFood();
-      // Immediately broadcast fresh board
+
+      // Broadcast the fresh state immediately
       broadcastGameState();
     }
   });
 
   ws.on("close", () => {
-    // If the current player disconnected, pick the next spectator
+    // If the player disconnects, pick the next spectator
     if (ws === currentPlayer) {
       currentPlayer = null;
       assignRoles();
     } else {
-      // Otherwise remove them from the queue
-      spectators = spectators.filter(s => s !== ws);
-      queue      = queue.filter(q => q !== ws);
+      // Otherwise remove from queue
+      queue = queue.filter(s => s !== ws);
     }
-    // Update everyone’s “players” list
+    // Update everyone’s player list
     broadcastGameState();
   });
 });
