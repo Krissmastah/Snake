@@ -1,59 +1,69 @@
 // public/snake.js
 
-// Grab elements
+// 1) Grab DOM elements
 const canvas      = document.getElementById("gameCanvas");
 const ctx         = canvas.getContext("2d");
 const playersList = document.getElementById("playersList");
-const scoreboard  = document.getElementById("scoreboard");
 const roleP       = document.getElementById("role");
 const abilityBtn  = document.getElementById("useAbility");
+const refreshBtn  = document.getElementById("refreshBtn");
 
-// Prompt and connect
+// 2) Ask for player name & initialize role
 let playerName = prompt("Enter your name:") || "Anon";
 let role       = "spectator";
+
+// 3) Connect to Render backend via WebSocket
 const BACKEND_URL = window.BACKEND_URL;
 const socket      = new WebSocket(BACKEND_URL.replace(/^http/, "ws"));
 
-// Join on open
+// 4) When socket opens, send join message
 socket.onopen = () => {
   socket.send(JSON.stringify({ type: "join", name: playerName }));
 };
 
-// Handle errors
+// 5) Handle errors
 socket.onerror = err => console.error("WS error", err);
 
-// Handle incoming messages
+// 6) Handle incoming messages
 socket.onmessage = ev => {
   const msg = JSON.parse(ev.data);
+
   if (msg.type === "roleAssignment") {
+    // Server tells us if we're player or spectator
     role = msg.role;
     roleP.innerText = `You are a ${role}`;
     if (role === "spectator") enableSpectator();
   }
+
   if (msg.type === "updateGameState") {
+    // msg.state contains { snake, blocks, food, players }
     renderGame(msg.state);
     updateUI(msg.state.players);
   }
+
   if (msg.type === "gameOver") {
-    alert("Game Over! Resetting…");
+    alert("Game Over! You died.");
   }
 };
 
-// Player movement
+// 7) Handle player movement keys
 document.addEventListener("keydown", e => {
   if (role !== "player") return;
   const dirs = {
     ArrowUp:    { x: 0,  y: -1 },
-    ArrowDown:  { x: 0,  y: 1 },
-    ArrowLeft:  { x: -1, y: 0 },
-    ArrowRight: { x: 1,  y: 0 }
+    ArrowDown:  { x: 0,  y:  1 },
+    ArrowLeft:  { x: -1, y:  0 },
+    ArrowRight: { x: 1,  y:  0 }
   };
   if (dirs[e.key]) {
-    socket.send(JSON.stringify({ type: "changeDirection", direction: dirs[e.key] }));
+    socket.send(JSON.stringify({
+      type: "changeDirection",
+      direction: dirs[e.key]
+    }));
   }
 });
 
-// Spectator block ability
+// 8) Spectator’s “place block” ability
 function enableSpectator() {
   let ready = true;
   abilityBtn.disabled = false;
@@ -64,44 +74,44 @@ function enableSpectator() {
     socket.send(JSON.stringify({ type: "placeBlock", x, y }));
     ready = false;
     abilityBtn.disabled = true;
-    setTimeout(() => { ready = true; abilityBtn.disabled = false; }, 60000);
+    setTimeout(() => { 
+      ready = true; 
+      abilityBtn.disabled = false; 
+    }, 60000);
   };
 }
 
-// Render the game state
+// 9) “Refresh Game” button logic
+refreshBtn.onclick = () => {
+  socket.send(JSON.stringify({ type: "reset" }));
+};
+
+// 10) Draw the game board: snake, blocks, and food
 function renderGame(state) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw snake
+  // Draw snake (green)
   ctx.fillStyle = "#0f0";
-  state.snake.forEach(p =>
-    ctx.fillRect(p.x * 20, p.y * 20, 20, 20)
-  );
+  state.snake.forEach(p => {
+    ctx.fillRect(p.x * 20, p.y * 20, 20, 20);
+  });
 
-  // Draw blocks
+  // Draw blocks (red)
   ctx.fillStyle = "red";
-  state.blocks.forEach(b =>
-    ctx.fillRect(b.x * 20, b.y * 20, 20, 20)
-  );
+  state.blocks.forEach(b => {
+    ctx.fillRect(b.x * 20, b.y * 20, 20, 20);
+  });
 
-  // Draw food
+  // Draw food (yellow)
   if (state.food) {
     ctx.fillStyle = "yellow";
     ctx.fillRect(state.food.x * 20, state.food.y * 20, 20, 20);
   }
 }
 
-// Update sidebar lists
+// 11) Update the “Players Online” sidebar
 function updateUI(players) {
-  // Players online
   playersList.innerHTML = players
     .map(p => `<li>${p.name} (${p.role})</li>`)
-    .join("");
-
-  // Scoreboard (sorted desc)
-  scoreboard.innerHTML = players
-    .slice() // copy before sort
-    .sort((a, b) => b.score - a.score)
-    .map(p => `<li>${p.name}: ${p.score}</li>`)
     .join("");
 }
