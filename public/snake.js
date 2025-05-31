@@ -1,21 +1,21 @@
 // public/snake.js
 
 // ── 1) Grab DOM elements ────────────────────────────────────────────────
-const canvas       = document.getElementById("gameCanvas");
-const ctx          = canvas.getContext("2d");
-const playersList  = document.getElementById("playersList");
+const canvas        = document.getElementById("gameCanvas");
+const ctx           = canvas.getContext("2d");
+const playersList   = document.getElementById("playersList");
 const highscoreList = document.getElementById("highscoreList");
-const roleP        = document.getElementById("role");
-const abilityBtn   = document.getElementById("useAbility");
-const refreshBtn   = document.getElementById("refreshBtn");
-const loginBtn     = document.getElementById("loginBtn");
-const registerBtn  = document.getElementById("registerBtn");
+const roleP         = document.getElementById("role");
+const abilityBtn    = document.getElementById("useAbility");
+const refreshBtn    = document.getElementById("refreshBtn");
+const loginBtn      = document.getElementById("loginBtn");
+const registerBtn   = document.getElementById("registerBtn");
 
 // ── 2) State variables ─────────────────────────────────────────────────
-let username    = null;
-let role        = null;      // “player” or “spectator”
-let ws          = null;      // WebSocket instance
-window.JWT_TOKEN = null;     // will hold JWT after login
+let username     = null;
+let role         = null;      // “player” or “spectator”
+let ws           = null;      // WebSocket instance
+window.JWT_TOKEN = null;      // will hold JWT after login
 
 // ── 3) Utility: Show messages to user ───────────────────────────────────
 function showError(msg) {
@@ -31,7 +31,8 @@ loginBtn.onclick = async () => {
     return;
   }
   try {
-    const res = await fetch("/login", {
+    // NOTE: Use the Render backend URL for /login
+    const res = await fetch(`${window.BACKEND_URL}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: user, password: pass })
@@ -59,7 +60,8 @@ registerBtn.onclick = async () => {
     return;
   }
   try {
-    const res = await fetch("/register", {
+    // NOTE: Use the Render backend URL for /register
+    const res = await fetch(`${window.BACKEND_URL}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: user, password: pass })
@@ -151,9 +153,9 @@ function enableSpectator() {
     ws.send(JSON.stringify({ type: "placeBlock", x, y }));
     ready = false;
     abilityBtn.disabled = true;
-    setTimeout(() => { 
-      ready = true; 
-      abilityBtn.disabled = false; 
+    setTimeout(() => {
+      ready = true;
+      abilityBtn.disabled = false;
     }, 60000);
   };
 }
@@ -190,7 +192,7 @@ function renderGame(state) {
 function updateUI(players, highScores) {
   // Players online (name + role)
   playersList.innerHTML = players
-    .map(p => 
+    .map(p =>
       `<li>
          <span class="name">${p.name}</span>
          <span class="role-tag">${p.role}</span>
@@ -199,7 +201,7 @@ function updateUI(players, highScores) {
 
   // High Scores (server already sorted top 10)
   highscoreList.innerHTML = highScores
-    .map(h => 
+    .map(h =>
       `<li>
          <span class="name">${h.name}</span>
          <span class="score">${h.score}</span>
