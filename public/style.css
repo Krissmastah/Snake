@@ -1,16 +1,194 @@
-body {
+/* style.css */
+
+/* ---------- Reset some defaults ---------- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f9f9f9;
+  color: #333;
+}
+
+/* ---------- Top Navbar ---------- */
+#topNavbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50px;
+  background-color: #2c3e50;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  font-family: sans-serif;
+  padding: 0 1rem;
+  z-index: 1000;
+}
+
+.nav-left {
+  flex: 1;
+}
+
+.nav-brand {
+  color: #ecf0f1;
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.nav-right {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.nav-button {
+  background-color: #3498db;
+  border: none;
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.nav-button:hover {
+  background-color: #2980b9;
+}
+
+/* ---------- Main Layout ---------- */
+#mainContainer {
+  display: flex;
+  height: calc(100% - 50px); /* subtract navbar height */
+  padding-top: 50px;
+}
+
+/* ---------- Sidebar ---------- */
+#sidebar {
+  width: 240px;
+  background-color: #ecf0f1;
+  padding: 1rem;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+}
+
+/* Each logical group in sidebar */
+.sidebar-section {
+  margin-bottom: 1.5rem;
+}
+
+.sidebar-section h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+  color: #2c3e50;
+  border-bottom: 1px solid #bdc3c7;
+  padding-bottom: 0.25rem;
+}
+
+#playersList,
+.highscore-list {
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+#playersList li,
+.highscore-list li {
+  margin-bottom: 0.3rem;
+  font-size: 0.95rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Emphasize “(player)” vs “(spectator)” with color */
+#playersList li .role-tag {
+  font-size: 0.8rem;
+  color: #7f8c8d;
+  margin-left: 0.3rem;
+}
+
+/* High score list: numbered & styled */
+.highscore-list {
+  list-style-position: inside;
+  padding-left: 1rem;
+}
+
+.highscore-list li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #bdc3c7;
+  display: flex;
+  justify-content: space-between;
+}
+
+.highscore-list li:last-child {
+  border-bottom: none;
+}
+
+.highscore-list li span.name {
+  font-weight: 500;
+}
+
+.highscore-list li span.score {
+  font-weight: bold;
+  color: #c0392b;
+}
+
+/* Buttons in sidebar */
+.sidebar-button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #27ae60;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-button:hover {
+  background-color: #1e8449;
+}
+
+/* “Use Block Ability” when disabled should look muted */
+#useAbility:disabled {
+  background-color: #95a5a6;
+  cursor: not-allowed;
+}
+
+/* Role text below */
+.role-text {
+  font-style: italic;
+  color: #7f8c8d;
+  margin-bottom: 0.5rem;
+}
+
+/* ---------- Game Area ---------- */
+#gameContainer {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #bdc3c7;
 }
 
 canvas {
-  border: 2px solid #333;
-  margin-bottom: 1rem;
+  border: 3px solid #2c3e50;
+  background-color: #fff;
 }
 
-button {
-  padding: 0.5rem 1rem;
-  font-size: 1rem;
+/* ---------- Scrollbar Styling (optional) ---------- */
+#sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+#sidebar::-webkit-scrollbar-track {
+  background: #ecf0f1;
+}
+#sidebar::-webkit-scrollbar-thumb {
+  background-color: #bdc3c7;
+  border-radius: 3px;
 }

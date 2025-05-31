@@ -112,13 +112,21 @@ function renderGame(state) {
 
 // 11) Update the “Players Online” and “High Scores” sidebar
 function updateUI(players, highScores) {
-  // Players online
+  // Players online (list each with a small “role” tag)
   playersList.innerHTML = players
-    .map(p => `<li>${p.name} (${p.role})</li>`)
-    .join("");
+    .map(p => 
+      `<li>
+         <span class="name">${p.name}</span>
+         <span class="role-tag">${p.role}</span>
+       </li>`
+    ).join("");
 
-  // High Scores (sorted descending by server already)
+  // High Scores (already sorted descending server-side)
   highscoreList.innerHTML = highScores
-    .map(h => `<li>${h.name}: ${h.score}</li>`)
-    .join("");
+    .map(h => 
+      `<li>
+         <span class="name">${h.name}</span>
+         <span class="score">${h.score}</span>
+       </li>`
+    ).join("");
 }

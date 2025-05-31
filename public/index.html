@@ -4,66 +4,46 @@
   <meta charset="UTF-8" />
   <title>Multiplayer Snake</title>
   <link rel="stylesheet" href="style.css" />
-  <style>
-    body {
-      margin: 0;
-      display: flex;
-      height: 100vh;
-      font-family: sans-serif;
-    }
-    #sidebar {
-      width: 220px;
-      padding: 1rem;
-      background: #f4f4f4;
-      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-      overflow-y: auto;
-    }
-    #gameContainer {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    canvas {
-      border: 2px solid #333;
-    }
-    h3 {
-      margin-top: 0;
-      margin-bottom: 0.5rem;
-    }
-    ul {
-      list-style: none;
-      padding: 0;
-      margin: 0 0 1rem 0;
-    }
-    li {
-      margin-bottom: 0.25rem;
-    }
-    button {
-      margin-bottom: 1rem;
-      width: 100%;
-      padding: 0.5rem;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-  </style>
 </head>
 <body>
-  <div id="sidebar">
-    <h3>Players Online</h3>
-    <ul id="playersList"></ul>
+  <!-- Top Navbar -->
+  <nav id="topNavbar">
+    <div class="nav-left">
+      <span class="nav-brand">Snake Multiplayer</span>
+    </div>
+    <div class="nav-right">
+      <button id="loginBtn" class="nav-button">Login</button>
+      <button id="registerBtn" class="nav-button">Register</button>
+    </div>
+  </nav>
 
-    <button id="refreshBtn">Refresh Game</button>
+  <div id="mainContainer">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <section class="sidebar-section">
+        <h3>Players Online</h3>
+        <ul id="playersList"></ul>
+      </section>
 
-    <h3>High Scores</h3>
-    <ul id="highscoreList"></ul>
+      <section class="sidebar-section">
+        <button id="refreshBtn" class="sidebar-button">🔄 Refresh Game</button>
+      </section>
 
-    <p id="role"></p>
-    <button id="useAbility" disabled>Use Block Ability</button>
-  </div>
+      <section class="sidebar-section">
+        <h3>High Scores</h3>
+        <ol id="highscoreList" class="highscore-list"></ol>
+      </section>
 
-  <div id="gameContainer">
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
+      <section class="sidebar-section">
+        <p id="role" class="role-text"></p>
+        <button id="useAbility" class="sidebar-button" disabled>Use Block Ability</button>
+      </section>
+    </aside>
+
+    <!-- Game Area -->
+    <main id="gameContainer">
+      <canvas id="gameCanvas" width="400" height="400"></canvas>
+    </main>
   </div>
 
   <!-- Update this to your Render backend URL -->
