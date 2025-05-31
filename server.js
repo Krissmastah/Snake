@@ -72,49 +72,64 @@ function assignRoles() {
   }
 }
 
-// Move the snake, handle growth on food, and collisions
+// Handle a “death” (hitting wall, block, or self)
+function handleDeath() {
+  if (currentPlayer) {
+    currentPlayer.send(JSON.stringify({ type: "gameOver" }));
+
+    // If someone is waiting, demote this player → spectator and re‐queue
+    if (queue.length > 0) {
+      currentPlayer.role = "spectator";
+      queue.push(currentPlayer);
+      currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
+      currentPlayer = null;
+      assignRoles();
+    } else {
+      // No one waiting: keep the same player, but we’ll re‐notify below
+    }
+  }
+
+  // Reset board
+  blocks = [];
+  gameState = createInitialGameState();
+  spawnFood();
+
+  // If same player remains (queue was empty), re‐notify them of their role
+  if (currentPlayer) {
+    currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
+  }
+
+  // Broadcast fresh state so clients see the new snake immediately
+  broadcastGameState();
+}
+
+// Move the snake, handle growth on food, and collisions (including walls)
 function moveSnake() {
   const head = gameState.snake[0];
   const dir  = gameState.direction;
   const newHead = { x: head.x + dir.x, y: head.y + dir.y };
 
-  // Check collisions
-  const hitBlock = blocks.some(b => b.x === newHead.x && b.y === newHead.y);
-  const hitSelf  = gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y);
-  if (hitBlock || hitSelf) {
-    // Inform current player they died
-    if (currentPlayer) {
-      currentPlayer.send(JSON.stringify({ type: "gameOver" }));
-
-      // If someone is waiting, demote this player → spectator and re‐queue
-      if (queue.length > 0) {
-        currentPlayer.role = "spectator";
-        queue.push(currentPlayer);
-        currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
-        currentPlayer = null;
-        assignRoles();
-      } else {
-        // No one waiting: keep the same player, but re‐notify them below
-      }
-    }
-
-    // Reset board
-    blocks = [];
-    gameState = createInitialGameState();
-    spawnFood();
-
-    // If no new player was assigned (because queue was empty), re‐notify the same player
-    if (currentPlayer) {
-      currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
-    }
-
-    // Broadcast fresh state so clients see the new snake immediately
-    broadcastGameState();
+  // ── WALL COLLISION: if new head is outside the grid, trigger death
+  if (
+    newHead.x < 0 || newHead.x >= GRID_WIDTH ||
+    newHead.y < 0 || newHead.y >= GRID_HEIGHT
+  ) {
+    handleDeath();
     return;
   }
 
-  // Normal movement: push new head, pop tail unless eating food
+  // Check collisions with blocks or itself
+  const hitBlock = blocks.some(b => b.x === newHead.x && b.y === newHead.y);
+  const hitSelf  = gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y);
+  if (hitBlock || hitSelf) {
+    handleDeath();
+    return;
+  }
+
+  // Normal movement: push new head
   gameState.snake.unshift(newHead);
+
+  // Eating food?
   if (newHead.x === gameState.food.x && newHead.y === gameState.food.y) {
     // Increase currentPlayer’s score
     if (currentPlayer) {
@@ -132,9 +147,10 @@ function moveSnake() {
       saveHighScores();
     }
 
-    // Don’t pop tail→ snake grows
+    // Don’t pop tail → snake grows
     spawnFood();
   } else {
+    // Normal move: pop tail
     gameState.snake.pop();
   }
 }
