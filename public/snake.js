@@ -1,12 +1,13 @@
 // public/snake.js
 
 // 1) Grab DOM elements
-const canvas      = document.getElementById("gameCanvas");
-const ctx         = canvas.getContext("2d");
-const playersList = document.getElementById("playersList");
-const roleP       = document.getElementById("role");
-const abilityBtn  = document.getElementById("useAbility");
-const refreshBtn  = document.getElementById("refreshBtn");
+const canvas       = document.getElementById("gameCanvas");
+const ctx          = canvas.getContext("2d");
+const playersList  = document.getElementById("playersList");
+const highscoreList = document.getElementById("highscoreList");
+const roleP        = document.getElementById("role");
+const abilityBtn   = document.getElementById("useAbility");
+const refreshBtn   = document.getElementById("refreshBtn");
 
 // 2) Ask for player name & initialize role
 let playerName = prompt("Enter your name:") || "Anon";
@@ -29,16 +30,16 @@ socket.onmessage = ev => {
   const msg = JSON.parse(ev.data);
 
   if (msg.type === "roleAssignment") {
-    // Server tells us if we're player or spectator
+    // The server tells us: "player" or "spectator"
     role = msg.role;
     roleP.innerText = `You are a ${role}`;
     if (role === "spectator") enableSpectator();
   }
 
   if (msg.type === "updateGameState") {
-    // msg.state contains { snake, blocks, food, players }
+    // msg.state has { snake, blocks, food, players, highScores }
     renderGame(msg.state);
-    updateUI(msg.state.players);
+    updateUI(msg.state.players, msg.state.highScores);
   }
 
   if (msg.type === "gameOver") {
@@ -81,7 +82,7 @@ function enableSpectator() {
   };
 }
 
-// 9) “Refresh Game” button logic
+// 9) “Refresh Game” button logic → send { type: "reset" }
 refreshBtn.onclick = () => {
   socket.send(JSON.stringify({ type: "reset" }));
 };
@@ -109,9 +110,15 @@ function renderGame(state) {
   }
 }
 
-// 11) Update the “Players Online” sidebar
-function updateUI(players) {
+// 11) Update the “Players Online” and “High Scores” sidebar
+function updateUI(players, highScores) {
+  // Players online
   playersList.innerHTML = players
     .map(p => `<li>${p.name} (${p.role})</li>`)
+    .join("");
+
+  // High Scores (sorted descending by server already)
+  highscoreList.innerHTML = highScores
+    .map(h => `<li>${h.name}: ${h.score}</li>`)
     .join("");
 }

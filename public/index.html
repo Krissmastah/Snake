@@ -12,7 +12,7 @@
       font-family: sans-serif;
     }
     #sidebar {
-      width: 200px;
+      width: 220px;
       padding: 1rem;
       background: #f4f4f4;
       box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
@@ -29,16 +29,22 @@
     }
     h3 {
       margin-top: 0;
+      margin-bottom: 0.5rem;
     }
     ul {
       list-style: none;
       padding: 0;
+      margin: 0 0 1rem 0;
+    }
+    li {
+      margin-bottom: 0.25rem;
     }
     button {
-      margin-top: 0.5rem;
+      margin-bottom: 1rem;
       width: 100%;
       padding: 0.5rem;
       font-size: 1rem;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -49,6 +55,9 @@
 
     <button id="refreshBtn">Refresh Game</button>
 
+    <h3>High Scores</h3>
+    <ul id="highscoreList"></ul>
+
     <p id="role"></p>
     <button id="useAbility" disabled>Use Block Ability</button>
   </div>
@@ -57,7 +66,7 @@
     <canvas id="gameCanvas" width="400" height="400"></canvas>
   </div>
 
-  <!-- Make sure this points to your Render backend URL: -->
+  <!-- Update this to your Render backend URL -->
   <script>
     window.BACKEND_URL = "https://snake-15x2.onrender.com";
   </script>

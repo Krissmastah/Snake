@@ -3,6 +3,8 @@
 const express   = require("express");
 const http      = require("http");
 const WebSocket = require("ws");
+const fs        = require("fs");
+const path      = require("path");
 
 const app    = express();
 const server = http.createServer(app);
@@ -12,10 +14,29 @@ app.use(express.static("public"));
 
 const GRID_WIDTH  = 20;
 const GRID_HEIGHT = 20;
+const HIGHSCORES_FILE = path.join(__dirname, "highscores.json");
 
 let queue         = [];     // spectators waiting to become player
 let currentPlayer = null;   // WS of the player
 let blocks        = [];     // spectator‐placed blocks
+
+// Load highScores from disk (or start empty)
+let highScores = [];
+try {
+  const data = fs.readFileSync(HIGHSCORES_FILE, "utf8");
+  highScores = JSON.parse(data);
+} catch (e) {
+  highScores = [];
+}
+
+// Persist highScores array (up to top 10) back to disk
+function saveHighScores() {
+  // Only keep top 10
+  highScores = highScores
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+  fs.writeFileSync(HIGHSCORES_FILE, JSON.stringify(highScores, null, 2), "utf8");
+}
 
 // Returns a fresh snake + direction (food will be spawned separately)
 function createInitialGameState() {
@@ -73,7 +94,7 @@ function moveSnake() {
         currentPlayer = null;
         assignRoles();
       } else {
-        // No one waiting: keep the same player, but still re‐notify them below
+        // No one waiting: keep the same player, but re‐notify them below
       }
     }
 
@@ -95,14 +116,30 @@ function moveSnake() {
   // Normal movement: push new head, pop tail unless eating food
   gameState.snake.unshift(newHead);
   if (newHead.x === gameState.food.x && newHead.y === gameState.food.y) {
-    // Grew: leave tail, and spawn a new pellet
+    // Increase currentPlayer’s score
+    if (currentPlayer) {
+      currentPlayer.score = (currentPlayer.score || 0) + 1;
+
+      // Update highScores for this player
+      const idx = highScores.findIndex(h => h.name === currentPlayer.name);
+      if (idx >= 0) {
+        if (currentPlayer.score > highScores[idx].score) {
+          highScores[idx].score = currentPlayer.score;
+        }
+      } else {
+        highScores.push({ name: currentPlayer.name, score: currentPlayer.score });
+      }
+      saveHighScores();
+    }
+
+    // Don’t pop tail→ snake grows
     spawnFood();
   } else {
     gameState.snake.pop();
   }
 }
 
-// Broadcast the entire game state (snake/blocks/food) plus a list of all players
+// Broadcast the entire game state (snake/blocks/food/players/highScores)
 function broadcastGameState() {
   // Build a simple array of {name, role} for every connected socket
   const playersList = [];
@@ -118,7 +155,8 @@ function broadcastGameState() {
       snake: gameState.snake,
       blocks,
       food: gameState.food,
-      players: playersList
+      players: playersList,
+      highScores
     }
   });
 
@@ -139,7 +177,7 @@ setInterval(() => {
 
 // Handle incoming WebSocket connections
 wss.on("connection", ws => {
-  ws.score = 0; // (unused for now, but you could track points here)
+  ws.score = 0; // track this session’s score
 
   ws.on("message", raw => {
     const data = JSON.parse(raw);
@@ -161,7 +199,7 @@ wss.on("connection", ws => {
         ws.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
       }
 
-      // Immediately broadcast so they see the board as soon as they join
+      // Immediately broadcast so they see the board & scores as soon as they join
       broadcastGameState();
     }
 
@@ -179,7 +217,7 @@ wss.on("connection", ws => {
       gameState.direction = data.direction;
     }
 
-    // **NEW: client clicked “Refresh Game”**
+    // Client clicked “Refresh Game”
     if (data.type === "reset") {
       // If someone is waiting, demote current player → spectator and assign next
       if (currentPlayer && queue.length > 0) {
@@ -212,7 +250,7 @@ wss.on("connection", ws => {
       // Otherwise remove from queue
       queue = queue.filter(s => s !== ws);
     }
-    // Update everyone’s player list
+    // Update everyone’s player list & highScores
     broadcastGameState();
   });
 });
