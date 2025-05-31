@@ -5,15 +5,17 @@ const http      = require("http");
 const WebSocket = require("ws");
 const fs        = require("fs");
 const path      = require("path");
-const bcrypt    = require("bcryptjs");        // <-- switched to bcryptjs
-const bodyParser = require("body-parser");
+const cors      = require("cors");       // <-- ADD THIS LINE
 
 const app    = express();
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server });
 
+// ── ENABLE CORS FOR ALL ORIGINS ──────────────────────────────────────
+// Allow cross‐origin requests (e.g. Netlify front end → Render backend)
+app.use(cors());
+
 app.use(express.static("public"));
-app.use(bodyParser.json()); // for parsing JSON bodies
 
 const GRID_WIDTH  = 20;
 const GRID_HEIGHT = 20;
@@ -22,11 +24,6 @@ const HIGHSCORES_FILE = path.join(__dirname, "highscores.json");
 let queue         = [];     // spectators waiting to become player
 let currentPlayer = null;   // WS of the player
 let blocks        = [];     // spectator‐placed blocks
-
-// ── Ensure highscores.json exists ───────────────────────────────────────
-if (!fs.existsSync(HIGHSCORES_FILE)) {
-  fs.writeFileSync(HIGHSCORES_FILE, "[]", "utf8");
-}
 
 // Load highScores from disk (or start empty)
 let highScores = [];
@@ -39,6 +36,7 @@ try {
 
 // Persist highScores array (up to top 10) back to disk
 function saveHighScores() {
+  // Only keep top 10
   highScores = highScores
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
