@@ -17,7 +17,7 @@ const { createClient } = require("@libsql/client");
 // Use your Turso connection string; set this in Render’s Environment as TURSO_URL.
 // If your Turso DB is protected by a service token, put it in TURSO_AUTH.
 const libsql = createClient({
-  url: process.env.TURSO_URL || "libsql://snakesnape-krissmastah.aws-eu-west-1.turso.io",
+  url: process.env.TURSO_URL || "https://snakesnape-krissmastah.aws-eu-west-1.turso.io",
   auth: {
     token: process.env.TURSO_AUTH || ""
   }
