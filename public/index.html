@@ -14,6 +14,7 @@
     <div class="nav-right">
       <button id="loginBtn" class="nav-button">Login</button>
       <button id="registerBtn" class="nav-button">Register</button>
+      <button id="guestBtn" class="nav-button">Play as Guest</button>
     </div>
   </nav>
 
@@ -46,10 +47,10 @@
     </main>
   </div>
 
-  <!-- We'll dynamically replace this with a JWT once logged in -->
+  <!-- Set your Render-backend URL here -->
   <script>
     window.BACKEND_URL = "https://snake-15x2.onrender.com";
-    window.JWT_TOKEN   = null;
+    window.JWT_TOKEN   = null; 
   </script>
   <script src="snake.js"></script>
 </body>

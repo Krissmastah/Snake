@@ -10,6 +10,7 @@ const abilityBtn    = document.getElementById("useAbility");
 const refreshBtn    = document.getElementById("refreshBtn");
 const loginBtn      = document.getElementById("loginBtn");
 const registerBtn   = document.getElementById("registerBtn");
+const guestBtn      = document.getElementById("guestBtn");
 
 // ── 2) State variables ─────────────────────────────────────────────────
 let username     = null;
@@ -31,7 +32,6 @@ loginBtn.onclick = async () => {
     return;
   }
   try {
-    // NOTE: Use the Render backend URL for /login
     const res = await fetch(`${window.BACKEND_URL}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -60,7 +60,6 @@ registerBtn.onclick = async () => {
     return;
   }
   try {
-    // NOTE: Use the Render backend URL for /register
     const res = await fetch(`${window.BACKEND_URL}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -77,22 +76,38 @@ registerBtn.onclick = async () => {
   }
 };
 
-// ── 6) Initialize WebSocket after login ─────────────────────────────────
-function initializeWebSocket() {
-  if (!window.JWT_TOKEN || !username) {
-    showError("Must be logged in first.");
+// ── 6) Handle “Play as Guest” ──────────────────────────────────────────
+guestBtn.onclick = () => {
+  username = null;           // no permanent name
+  window.JWT_TOKEN = null;   // no token
+  initializeWebSocket(true); // pass “true” for guest mode
+};
+
+// ── 7) Initialize WebSocket after login or guest ────────────────────────
+function initializeWebSocket(isGuest = false) {
+  // If not guest, we need a JWT and username
+  if (!isGuest && (!window.JWT_TOKEN || !username)) {
+    showError("Must be logged in first, or click Play as Guest.");
     return;
   }
-  // Disable login/register buttons once logged in
-  loginBtn.disabled = true;
+  // Disable login/register/guest buttons once connected
+  loginBtn.disabled    = true;
   registerBtn.disabled = true;
+  guestBtn.disabled    = true;
 
-  // Build WebSocket URL with token in query string
-  const wsUrl = window.BACKEND_URL.replace(/^http/, "ws") + `?token=${window.JWT_TOKEN}`;
+  // Build WebSocket URL
+  let wsUrl = window.BACKEND_URL.replace(/^http/, "ws");
+  if (isGuest) {
+    wsUrl += "?guest=true";
+  } else {
+    wsUrl += `?token=${window.JWT_TOKEN}`;
+  }
+
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
-    // Send join (we ignore data.name on server and trust JWT)
+    // Send “join” so server can assign role
+    // For guests, server already gave ws.username = "Guest####"
     ws.send(JSON.stringify({ type: "join", name: username }));
   };
 
@@ -125,7 +140,7 @@ function initializeWebSocket() {
   };
 }
 
-// ── 7) Handle player movement keys ─────────────────────────────────────
+// ── 8) Handle player movement keys ─────────────────────────────────────
 document.addEventListener("keydown", e => {
   if (!ws || role !== "player") return;
   const dirs = {
@@ -142,7 +157,7 @@ document.addEventListener("keydown", e => {
   }
 });
 
-// ── 8) Spectator’s “place block” ability ───────────────────────────────
+// ── 9) Spectator’s “place block” ability ───────────────────────────────
 function enableSpectator() {
   let ready = true;
   abilityBtn.disabled = false;
@@ -160,12 +175,12 @@ function enableSpectator() {
   };
 }
 
-// ── 9) “Refresh Game” button logic → send { type: "reset" } ───────────
+// ── 10) Refresh Game → send { type: "reset" } ───────────────────────────
 refreshBtn.onclick = () => {
   if (ws) ws.send(JSON.stringify({ type: "reset" }));
 };
 
-// ── 10) Draw the game board: snake, blocks, and food ─────────────────
+// ── 11) Draw the game board: snake, blocks, and food ─────────────────
 function renderGame(state) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -188,7 +203,7 @@ function renderGame(state) {
   }
 }
 
-// ── 11) Update the “Players Online” and “High Scores” sidebar ──────────
+// ── 12) Update the “Players Online” and “High Scores” sidebar ──────────
 function updateUI(players, highScores) {
   // Players online (name + role)
   playersList.innerHTML = players
@@ -199,7 +214,7 @@ function updateUI(players, highScores) {
        </li>`
     ).join("");
 
-  // High Scores (server already sorted top 10)
+  // High Scores (sorted top 10 by server)
   highscoreList.innerHTML = highScores
     .map(h =>
       `<li>
