@@ -96,11 +96,11 @@ window.addEventListener("DOMContentLoaded", () => {
     registerBtn.disabled = true;
     guestBtn.disabled    = true;
 
-    // Build WebSocket URL (use wss:// when served over HTTPS)
+    // Build WebSocket URL:
+    //   - "http://..." becomes "ws://..."
+    //   - "https://..." becomes "wss://..."
     let wsUrl = window.BACKEND_URL.replace(/^http/, "ws");
-    if (window.BACKEND_URL.startsWith("https://")) {
-      wsUrl = window.BACKEND_URL.replace(/^http/, "wss");
-    }
+
     if (isGuest) {
       wsUrl += "?guest=true";
     } else {
