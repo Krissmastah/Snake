@@ -14,8 +14,8 @@ const { createClient } = require("@libsql/client");
 // 1) Configure Turso (LibSQL) client
 //////////////////////////////////////
 
-// Use your Turso connection string; set this in Render’s Environment as TURSO_URL.
-// If your Turso DB is protected by a service token, put it in TURSO_AUTH.
+// Use your Turso connection string (HTTPS form) in Render’s Environment as TURSO_URL.
+// If your Turso DB requires a service token, put it in TURSO_AUTH.
 const libsql = createClient({
   url: process.env.TURSO_URL || "https://snakesnape-krissmastah.aws-eu-west-1.turso.io",
   auth: {
@@ -27,7 +27,7 @@ const libsql = createClient({
 // 2) Configure JWT secret for session tokens
 ////////////////////////////////////////////////
 
-// Set a strong random string as JWT_SECRET in your Render environment too.
+// Store a long, random JWT_SECRET in Render’s environment variable.
 const JWT_SECRET = process.env.JWT_SECRET || "replace_this_with_a_strong_random_string";
 
 ////////////////////////////////////////////////
@@ -38,12 +38,28 @@ const app    = express();
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ noServer: true });
 
-// ── Enable CORS for all origins (or lock to Netlify only) ──────────────
-// If you want to restrict to your Netlify domain, do:
-//    app.use(cors({ origin: "https://snakesnape.netlify.app" }));
-// For now, allow any origin:
-app.use(cors());
-app.use(express.json());      // parse JSON bodies
+// ── CORS Setup ──────────────────────────────────────────────────────────
+// Only allow requests from your Netlify front-end
+const allowedOrigin = "https://snakesnape.netlify.app";
+
+app.use(cors({
+  origin: allowedOrigin,
+  methods: ["GET","HEAD","PUT","PATCH","POST","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"]
+}));
+
+// Make sure preflight (OPTIONS) is handled for every route:
+app.options("*", cors({
+  origin: allowedOrigin,
+  methods: ["GET","HEAD","PUT","PATCH","POST","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"]
+}));
+
+// Parse JSON bodies
+app.use(express.json());
+
+// (Optional) If you ever want to serve static files from "public", keep this.
+// In most cases, your front-end is on Netlify, so this is unused.
 app.use(express.static("public"));
 
 ////////////////////////////////////////
@@ -52,7 +68,7 @@ app.use(express.static("public"));
 
 const HIGHSCORES_FILE = path.join(__dirname, "highscores.json");
 
-// Auto-create file if missing
+// Auto-create if missing
 if (!fs.existsSync(HIGHSCORES_FILE)) {
   fs.writeFileSync(HIGHSCORES_FILE, "[]", "utf8");
 }
