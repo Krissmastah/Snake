@@ -1,7 +1,5 @@
 // server.js
 
-require("dotenv").config(); // so we can read process.env.TURSO_URL, TURSO_AUTH, JWT_SECRET
-
 const express    = require("express");
 const http       = require("http");
 const WebSocket  = require("ws");
