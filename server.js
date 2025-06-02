@@ -14,20 +14,16 @@ const { createClient } = require("@libsql/client");
 // 1) Configure Turso (LibSQL) client
 //////////////////////////////////////
 
-// Use your Turso connection string (HTTPS form) in Render’s Environment as TURSO_URL.
-// If your Turso DB requires a service token, put it in TURSO_AUTH.
+// Use your Turso connection string and service token from environment
 const libsql = createClient({
-  url: process.env.TURSO_URL || "https://snakesnape-krissmastah.aws-eu-west-1.turso.io",
-  auth: {
-    token: process.env.TURSO_AUTH || ""
-  }
+  url: process.env.TURSO_URL,             // e.g. "https://snakesnape-krissmastah.aws-eu-west-1.turso.io"
+  auth: { token: process.env.TURSO_AUTH } // your Turso service token
 });
 
 ////////////////////////////////////////////////
 // 2) Configure JWT secret for session tokens
 ////////////////////////////////////////////////
 
-// Store a long, random JWT_SECRET in Render’s environment variable.
 const JWT_SECRET = process.env.JWT_SECRET || "replace_this_with_a_strong_random_string";
 
 ////////////////////////////////////////////////
@@ -39,7 +35,6 @@ const server = http.createServer(app);
 const wss    = new WebSocket.Server({ noServer: true });
 
 // ── CORS Setup ──────────────────────────────────────────────────────────
-// Only allow requests from your Netlify front-end
 const allowedOrigin = "https://snakesnape.netlify.app";
 
 app.use(cors({
@@ -48,18 +43,14 @@ app.use(cors({
   allowedHeaders: ["Content-Type","Authorization"]
 }));
 
-// Make sure preflight (OPTIONS) is handled for every route:
 app.options("*", cors({
   origin: allowedOrigin,
   methods: ["GET","HEAD","PUT","PATCH","POST","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"]
 }));
 
-// Parse JSON bodies
 app.use(express.json());
-
-// (Optional) If you ever want to serve static files from "public", keep this.
-// In most cases, your front-end is on Netlify, so this is unused.
+// (Optional) serve static files from "public" if needed
 app.use(express.static("public"));
 
 ////////////////////////////////////////
@@ -68,7 +59,7 @@ app.use(express.static("public"));
 
 const HIGHSCORES_FILE = path.join(__dirname, "highscores.json");
 
-// Auto-create if missing
+// Auto-create file if missing
 if (!fs.existsSync(HIGHSCORES_FILE)) {
   fs.writeFileSync(HIGHSCORES_FILE, "[]", "utf8");
 }
@@ -164,7 +155,6 @@ let queue         = [];     // Spectators waiting to become player
 let currentPlayer = null;   // WS of the current player
 let blocks        = [];     // Spectator-placed blocks
 
-// Helper: fresh snake + direction (food null for now)
 function createInitialGameState() {
   return {
     snake: [{ x: 10, y: 10 }],
@@ -200,7 +190,6 @@ function handleDeath() {
   if (currentPlayer) {
     currentPlayer.send(JSON.stringify({ type: "gameOver" }));
 
-    // If there is a spectator waiting, demote current player → spectator
     if (queue.length > 0) {
       currentPlayer.role = "spectator";
       queue.push(currentPlayer);
@@ -208,15 +197,12 @@ function handleDeath() {
       currentPlayer = null;
       assignRoles();
     }
-    // If no one waiting, same player remains—but we re-notify below
   }
 
-  // Reset board
   blocks = [];
   gameState = createInitialGameState();
   spawnFood();
 
-  // If same player remains, re-notify them
   if (currentPlayer) {
     currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
   }
@@ -229,7 +215,6 @@ function moveSnake() {
   const dir  = gameState.direction;
   const newHead = { x: head.x + dir.x, y: head.y + dir.y };
 
-  // WALL COLLISION
   if (
     newHead.x < 0 || newHead.x >= GRID_WIDTH ||
     newHead.y < 0 || newHead.y >= GRID_HEIGHT
@@ -238,7 +223,6 @@ function moveSnake() {
     return;
   }
 
-  // BLOCK or SELF collision?
   const hitBlock = blocks.some(b => b.x === newHead.x && b.y === newHead.y);
   const hitSelf  = gameState.snake.some(p => p.x === newHead.x && p.y === newHead.y);
   if (hitBlock || hitSelf) {
@@ -246,15 +230,11 @@ function moveSnake() {
     return;
   }
 
-  // Advance snake
   gameState.snake.unshift(newHead);
 
-  // Eating food?
   if (newHead.x === gameState.food.x && newHead.y === gameState.food.y) {
-    // Increase score
     if (currentPlayer) {
       currentPlayer.sessionScore = (currentPlayer.sessionScore || 0) + 1;
-      // Update highScores
       const idx = highScores.findIndex(h => h.name === currentPlayer.username);
       if (idx >= 0) {
         if (currentPlayer.sessionScore > highScores[idx].score) {
@@ -268,10 +248,8 @@ function moveSnake() {
       }
       saveHighScores();
     }
-    // Don’t pop tail → snake grows
     spawnFood();
   } else {
-    // Normal move
     gameState.snake.pop();
   }
 }
@@ -302,7 +280,6 @@ function broadcastGameState() {
   });
 }
 
-// Game loop: tick every 200ms if there’s a player
 setInterval(() => {
   if (currentPlayer) {
     moveSnake();
@@ -315,13 +292,11 @@ setInterval(() => {
 ///////////////////////////////////////////////////////
 
 server.on("upgrade", (req, socket, head) => {
-  // Parse URL query params
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const token = urlObj.searchParams.get("token");
   const guest = urlObj.searchParams.get("guest");
 
   if (token) {
-    // If token present → verify it
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
       if (err) {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -334,14 +309,12 @@ server.on("upgrade", (req, socket, head) => {
       });
     });
   } else if (guest === "true") {
-    // Guest mode: assign a random Guest name
     const randNum = Math.floor(1000 + Math.random() * 9000);
     req.username = `Guest${randNum}`;
     wss.handleUpgrade(req, socket, head, ws => {
       wss.emit("connection", ws, req);
     });
   } else {
-    // No token & no guest flag → reject
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
   }
@@ -352,9 +325,9 @@ server.on("upgrade", (req, socket, head) => {
 ///////////////////////////////////////////////////////////
 
 wss.on("connection", (ws, request) => {
-  ws.username     = request.username; // from upgrade step
-  ws.sessionScore = 0;                // track this user’s session score
-  ws.lastBlockTime = 0;               // for spectator block cooldown
+  ws.username     = request.username;
+  ws.sessionScore = 0;
+  ws.lastBlockTime = 0;
   ws.role         = null;
 
   ws.on("message", raw => {
@@ -365,10 +338,7 @@ wss.on("connection", (ws, request) => {
       return;
     }
 
-    // JOIN message: assign roles & let them start playing
     if (data.type === "join") {
-      // We ignore data.name for authenticated users—use ws.username
-      // For guests, ws.username is already “Guest####.”
       if (!currentPlayer) {
         currentPlayer = ws;
         ws.role        = "player";
@@ -381,7 +351,6 @@ wss.on("connection", (ws, request) => {
       broadcastGameState();
     }
 
-    // Spectator places a block (with 60s cooldown)
     if (data.type === "placeBlock" && ws.role === "spectator") {
       const now = Date.now();
       if (now - ws.lastBlockTime >= 60000) {
@@ -390,12 +359,10 @@ wss.on("connection", (ws, request) => {
       }
     }
 
-    // Player changes direction
     if (data.type === "changeDirection" && ws.role === "player") {
       gameState.direction = data.direction;
     }
 
-    // Refresh game
     if (data.type === "reset") {
       if (currentPlayer && queue.length > 0) {
         currentPlayer.role = "spectator";
@@ -404,7 +371,6 @@ wss.on("connection", (ws, request) => {
         currentPlayer = null;
         assignRoles();
       } else if (currentPlayer) {
-        // No one waiting
         currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
       }
       blocks = [];
