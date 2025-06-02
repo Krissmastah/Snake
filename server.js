@@ -24,7 +24,7 @@ const libsql = createClient({
 // 2) Configure JWT secret for session tokens
 ////////////////////////////////////////////////
 
-const JWT_SECRET = process.env.JWT_SECRET || "replace_this_with_a_strong_random_string";
+const JWT_SECRET = process.env.JWT_SECRET || "your_very_long_random_string";
 
 ////////////////////////////////////////////////
 // 3) Express + HTTP + WebSocket setup
