@@ -1,7 +1,7 @@
 // public/snake.js
 
 window.addEventListener("DOMContentLoaded", () => {
-  // ── 1) Grab DOM elements (only after DOM is ready) ─────────────────────
+  // ── 1) Grab DOM elements ───────────────────────────────────────────────
   const canvas        = document.getElementById("gameCanvas");
   const ctx           = canvas.getContext("2d");
   const playersList   = document.getElementById("playersList");
@@ -18,6 +18,19 @@ window.addEventListener("DOMContentLoaded", () => {
   let role         = null;      // “player” or “spectator”
   let ws           = null;      // WebSocket instance
   window.JWT_TOKEN = null;      // will hold JWT after login
+
+  // Create a “Start” button (initially hidden)
+  const startBtn = document.createElement("button");
+  startBtn.innerText = "Start Game";
+  startBtn.style.position = "absolute";
+  startBtn.style.top = "50%";
+  startBtn.style.left = "50%";
+  startBtn.style.transform = "translate(-50%, -50%)";
+  startBtn.style.padding = "1rem 2rem";
+  startBtn.style.fontSize = "1.2rem";
+  startBtn.style.zIndex = "1000";
+  startBtn.style.display = "none";
+  document.body.appendChild(startBtn);
 
   // ── 3) Utility: Show messages to user ───────────────────────────────────
   function showError(msg) {
@@ -43,10 +56,16 @@ window.addEventListener("DOMContentLoaded", () => {
         showError(data.error || "Login failed");
         return;
       }
-      // Store JWT and username, then open WebSocket
+      // Store JWT and username, then enable “Start Game” instead of auto-join
       window.JWT_TOKEN = data.token;
       username = user;
-      initializeWebSocket();
+
+      // Show the “Start Game” button now that we’re authenticated
+      startBtn.style.display = "block";
+      startBtn.onclick = () => {
+        sendJoin();
+        startBtn.style.display = "none";
+      };
     } catch (e) {
       showError("Login request failed");
     }
@@ -79,49 +98,52 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // ── 6) Handle “Play as Guest” ──────────────────────────────────────────
   guestBtn.onclick = () => {
-    username = null;           // no permanent name
-    window.JWT_TOKEN = null;   // no token
-    initializeWebSocket(true); // pass “true” for guest mode
+    username = `Guest${Math.floor(Math.random() * 10000)}`;
+    window.JWT_TOKEN = null;
+
+    // Show “Start Game” button for guest mode
+    startBtn.style.display = "block";
+    startBtn.onclick = () => {
+      sendJoin();
+      startBtn.style.display = "none";
+    };
   };
 
-  // ── 7) Initialize WebSocket after login or guest ────────────────────────
-  function initializeWebSocket(isGuest = false) {
-    // If not guest, we need a JWT and username
-    if (!isGuest && (!window.JWT_TOKEN || !username)) {
-      showError("Must be logged in first, or click Play as Guest.");
+  // ── 7) Helper: send a JOIN message (for player to become “currentPlayer”) ─
+  function sendJoin() {
+    if (!ws) {
+      // Only create WebSocket connection on first join
+      initializeWebSocket(/* isGuest= */ username.startsWith("Guest"));
       return;
     }
+    // If WS already open, just send the join payload
+    ws.send(JSON.stringify({ type: "join", name: username }));
+  }
 
-    // Disable login/register/guest buttons once connected
-    loginBtn.disabled    = true;
-    registerBtn.disabled = true;
-    guestBtn.disabled    = true;
-
-    // Build WebSocket URL properly:
+  // ── 8) Initialize WebSocket (but DO NOT auto-join until user clicks Start) ─
+  function initializeWebSocket(isGuest = false) {
+    // Build WebSocket URL (same “wss://” vs “ws://” logic)
     let wsUrl;
     if (window.BACKEND_URL.startsWith("https://")) {
-      // strip "https://" and prepend "wss://"
       wsUrl = "wss://" + window.BACKEND_URL.slice(8);
     } else if (window.BACKEND_URL.startsWith("http://")) {
-      // strip "http://" and prepend "ws://"
       wsUrl = "ws://" + window.BACKEND_URL.slice(7);
     } else {
-      // Fallback error if BACKEND_URL is not http/https
       showError("Invalid BACKEND_URL protocol.");
       return;
     }
 
-    if (isGuest) {
-      wsUrl += "?guest=true";
-    } else {
+    if (!isGuest) {
       wsUrl += `?token=${window.JWT_TOKEN}`;
+    } else {
+      wsUrl += "?guest=true";
     }
 
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      // Send “join” so server can assign role
-      ws.send(JSON.stringify({ type: "join", name: username }));
+      // If startBtn was clicked, then send join right away.
+      // Otherwise, do nothing until sendJoin() is called.
     };
 
     ws.onerror = err => {
@@ -135,7 +157,10 @@ window.addEventListener("DOMContentLoaded", () => {
       if (msg.type === "roleAssignment") {
         role = msg.role;
         roleP.innerText = `You are a ${role}`;
-        if (role === "spectator") enableSpectator();
+
+        if (role === "spectator") {
+          abilityBtn.disabled = false;
+        }
       }
 
       if (msg.type === "updateGameState") {
@@ -144,7 +169,15 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       if (msg.type === "gameOver") {
+        // Show an alert and then re-display the “Start Game” button
         alert("Game Over! You died.");
+
+        // Let the user click Start again (to re-join)
+        startBtn.style.display = "block";
+        startBtn.onclick = () => {
+          sendJoin();
+          startBtn.style.display = "none";
+        };
       }
     };
 
@@ -153,7 +186,7 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // ── 8) Handle player movement keys ─────────────────────────────────────
+  // ── 9) Handle player movement keys ─────────────────────────────────────
   document.addEventListener("keydown", e => {
     if (!ws || role !== "player") return;
     const dirs = {
@@ -170,7 +203,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // ── 9) Spectator’s “place block” ability ───────────────────────────────
+  // ── 10) Spectator’s “place block” ability ───────────────────────────────
   function enableSpectator() {
     let ready = true;
     abilityBtn.disabled = false;
@@ -188,12 +221,12 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // ── 10) Refresh Game → send { type: "reset" } ───────────────────────────
+  // ── 11) Refresh Game → send { type: "reset" } ───────────────────────────
   refreshBtn.onclick = () => {
     if (ws) ws.send(JSON.stringify({ type: "reset" }));
   };
 
-  // ── 11) Draw the game board: snake, blocks, and food ─────────────────
+  // ── 12) Draw the game board: snake, blocks, and food ───────────────────
   function renderGame(state) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -216,7 +249,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ── 12) Update the “Players Online” and “High Scores” sidebar ──────────
+  // ── 13) Update the “Players Online” and “High Scores” sidebar ──────────
   function updateUI(players, highScores) {
     // Players online (name + role)
     playersList.innerHTML = players

@@ -19,6 +19,8 @@ const libsql = createClient({
   url: process.env.TURSO_URL,             // e.g. "https://snakesnape-krissmastah.aws-eu-west-1.turso.io"
   auth: { token: process.env.TURSO_AUTH } // your Turso service token
 });
+console.log("→ TURSO_URL (env):", process.env.TURSO_URL);
+console.log("→ TURSO_AUTH present? length=", process.env.TURSO_AUTH?.length || 0);
 
 ////////////////////////////////////////////////
 // 2) Configure JWT secret for session tokens
@@ -186,29 +188,29 @@ function assignRoles() {
   }
 }
 
+// ── MODIFIED handleDeath ─────────────────────────────────────────────────
 function handleDeath() {
   if (currentPlayer) {
+    // Notify the old player that their game is over
     currentPlayer.send(JSON.stringify({ type: "gameOver" }));
 
-    if (queue.length > 0) {
-      currentPlayer.role = "spectator";
-      queue.push(currentPlayer);
-      currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "spectator" }));
-      currentPlayer = null;
-      assignRoles();
-    }
+    // Demote the old player into a spectator
+    currentPlayer.role = "spectator";
+    queue.push(currentPlayer);
   }
 
+  // Clear out the currentPlayer slot entirely
+  currentPlayer = null;
+
+  // Reset the board state (blocks + snake + food)
   blocks = [];
   gameState = createInitialGameState();
   spawnFood();
 
-  if (currentPlayer) {
-    currentPlayer.send(JSON.stringify({ type: "roleAssignment", role: "player" }));
-  }
-
+  // Broadcast the new (empty) state to everyone
   broadcastGameState();
 }
+// ── end of handleDeath change ─────────────────────────────────────────────
 
 function moveSnake() {
   const head = gameState.snake[0];
