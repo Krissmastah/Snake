@@ -1,7 +1,7 @@
 // public/snake.js
 
 window.addEventListener("DOMContentLoaded", () => {
-  // ── 1) Grab DOM elements (only after DOM is ready) ─────────────────────
+  // ── 1) Grab DOM elements ────────────────────────────────────────────────
   const canvas        = document.getElementById("gameCanvas");
   const ctx           = canvas.getContext("2d");
   const playersList   = document.getElementById("playersList");
@@ -12,6 +12,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const loginBtn      = document.getElementById("loginBtn");
   const registerBtn   = document.getElementById("registerBtn");
   const guestBtn      = document.getElementById("guestBtn");
+  const startBtn      = document.getElementById("startBtn"); // ← new
 
   // ── 2) State variables ─────────────────────────────────────────────────
   let username     = null;
@@ -96,11 +97,11 @@ window.addEventListener("DOMContentLoaded", () => {
     registerBtn.disabled = true;
     guestBtn.disabled    = true;
 
-    // Build WebSocket URL:
-    //   - "http://..." becomes "ws://..."
-    //   - "https://..." becomes "wss://..."
+    // Build WebSocket URL (use wss:// when served over HTTPS)
     let wsUrl = window.BACKEND_URL.replace(/^http/, "ws");
-
+    if (window.BACKEND_URL.startsWith("https://")) {
+      wsUrl = window.BACKEND_URL.replace(/^http/, "wss");
+    }
     if (isGuest) {
       wsUrl += "?guest=true";
     } else {
@@ -122,19 +123,41 @@ window.addEventListener("DOMContentLoaded", () => {
     ws.onmessage = ev => {
       const msg = JSON.parse(ev.data);
 
+      // ── Role Assignment ───────────────────────────────────────────────
       if (msg.type === "roleAssignment") {
         role = msg.role;
         roleP.innerText = `You are a ${role}`;
-        if (role === "spectator") enableSpectator();
+
+        // If you're assigned “player,” enable the Start button
+        if (role === "player") {
+          startBtn.disabled = false;
+          startBtn.innerText = "Start Game";
+        } else {
+          startBtn.disabled = true;
+        }
+
+        // If you become a spectator, enable the block ability after cooldown
+        if (role === "spectator") {
+          enableSpectator();
+        } else {
+          abilityBtn.disabled = true;
+        }
       }
 
+      // ── Update Game State ─────────────────────────────────────────────
       if (msg.type === "updateGameState") {
         renderGame(msg.state);
         updateUI(msg.state.players, msg.state.highScores);
       }
 
+      // ── Game Over ─────────────────────────────────────────────────────
       if (msg.type === "gameOver") {
         alert("Game Over! You died.");
+        // After death, Start button re‐enables (so you must click to begin again).
+        if (role === "player") {
+          startBtn.disabled = false;
+          startBtn.innerText = "Start Game";
+        }
       }
     };
 
@@ -143,7 +166,14 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // ── 8) Handle player movement keys ─────────────────────────────────────
+  // ── 8) Handle “Start Game” button ────────────────────────────────────
+  startBtn.onclick = () => {
+    if (!ws || role !== "player") return;
+    ws.send(JSON.stringify({ type: "start" }));
+    startBtn.disabled = true; // disable until next Game Over / reassign
+  };
+
+  // ── 9) Handle player movement keys ─────────────────────────────────────
   document.addEventListener("keydown", e => {
     if (!ws || role !== "player") return;
     const dirs = {
@@ -160,7 +190,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // ── 9) Spectator’s “place block” ability ───────────────────────────────
+  // ── 10) Spectator’s “place block” ability ───────────────────────────────
   function enableSpectator() {
     let ready = true;
     abilityBtn.disabled = false;
@@ -178,12 +208,12 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // ── 10) Refresh Game → send { type: "reset" } ───────────────────────────
+  // ── 11) Refresh Game → send { type: "reset" } ───────────────────────────
   refreshBtn.onclick = () => {
     if (ws) ws.send(JSON.stringify({ type: "reset" }));
   };
 
-  // ── 11) Draw the game board: snake, blocks, and food ─────────────────
+  // ── 12) Draw the game board: snake, blocks, and food ───────────────────
   function renderGame(state) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -206,7 +236,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ── 12) Update the “Players Online” and “High Scores” sidebar ──────────
+  // ── 13) Update the “Players Online” and “High Scores” sidebar ──────────
   function updateUI(players, highScores) {
     // Players online (name + role)
     playersList.innerHTML = players
